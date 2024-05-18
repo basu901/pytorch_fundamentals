@@ -4,11 +4,12 @@ import torch.nn.functional as F
 import csv
 import time
 import matplotlib.pyplot as plt
-
+import sys
 import pandas as pd
 from torch.utils.data import DataLoader, Dataset
 
 from pathlib import Path
+from argparse import ArgumentParser
 
 
 
@@ -74,45 +75,25 @@ def create_csv(data_source, csv_source):
         write_files.writerows(data_rows)
 
 
-if __name__=="__main__":
-    data_source = Path("/Users/shaunakbasu/Documents/Datasets/ml-100k/ml-100k/u.data")
-    csv_source = Path("/Users/shaunakbasu/Documents/Datasets/ml-100k/ml-100k/u_data.csv")
 
-    if not csv_source.exists():
-        create_csv(data_source, csv_source)
-    
-    num_factors = 4
-    dataset = RatingDataSetLoader(csv_source, num_factors)
-    data_loader = DataLoader(dataset, shuffle=True, batch_size=5)
-
-    #Since we are stacking both the user embedding and the movie embedding, we multiply the num_factors by 2
-    m = Model(num_factors*2)
-
-    epochs = 25
-
-    #Set the criterion for measuring the loss function
-    #criterion = nn.MSELoss()
-    criterion = nn.L1Loss()
-
-    #Choose Adam Optimizer, learning rate=lr; if the error doesn't decrease a number of epochs, lower the learning rate(Adam property?)
-    optimizer=torch.optim.Adam(m.parameters(),lr=0.01)
+def train_model(data_loader, model, criterion, optimizer, EPOCHS, DEVICE):
     loss_list = list()
 
     start = time.perf_counter()
 
-    for i in range(0, epochs):
+    for i in range(0, EPOCHS):
         epoch_loss = 0
         counter = 0
         for idx, data in enumerate(data_loader,1):
-            user_embed = data[0]
-            movie_embed = data[1]
-            expected_ratings = data[2]
-            predicted_rating = m.forward(user_embed,movie_embed).squeeze(-1)
+            user_embed = data[0].to(DEVICE)
+            movie_embed = data[1].to(DEVICE)
+            expected_ratings = data[2].to(DEVICE)
+            predicted_rating = model.forward(user_embed,movie_embed).squeeze(-1)
             loss = criterion(expected_ratings,predicted_rating)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            epoch_loss += loss.detach().numpy()
+            epoch_loss += loss.cpu().detach().numpy()
             counter += 1
         loss_list.append(epoch_loss/counter)
         print(f"Epoch: {i}, loss: {epoch_loss/counter}")
@@ -120,14 +101,62 @@ if __name__=="__main__":
     stop = time.perf_counter()
 
     print(f"Total time taken: {stop-start}s")
-    plt.plot(range(epochs),loss_list)
+    plt.plot(range(EPOCHS),loss_list)
     plt.ylabel("loss/error")
     plt.xlabel("Epoch")
     plt.show()
     
     #Total time taken: 579.0461256660055s
-    #Thi above result was for  25 epochs
+    #The above result was for  25 epochs
 
+
+if __name__=="__main__":
+    parser = ArgumentParser()
+    parser.add_argument("--gpu", required=False, help="Which gpu you want to run on", default="cpu")
+    parser.add_argument("--epochs", required=True, help="Number of epochs for training")
+    #parser.add_argument("--batch_size", required=False, help="Batch Size for training, defaults to 5", default=5)
+    parser.add_argument("--num_factors", required=False, help="Number of latent factors, defaults to 4", default=4)
+
+    args = parser.parse_args()
+
+    #TODO: Check for CUDA support in code
+    EPOCHS = int(args.epochs)
+    DEVICE = args.gpu
+    NUM_FACTORS = int(args.num_factors)
+
+    if DEVICE=="mps":
+        if not torch.backends.mps.is_available():
+            if not torch.backends.mps.is_built():
+                print("MPS not available because the current PyTorch install was not "
+              "built with MPS enabled.")
+            else:
+                print("MPS not available because the current MacOS version is not 12.3+ "
+              "and/or you do not have an MPS-enabled device on this machine.")
+            sys.exit()
+    
+    DEVICE = torch.device(DEVICE)
+    print(f"DEVICE: {DEVICE}")
+
+    data_source = Path("/Users/shaunakbasu/Documents/Datasets/ml-100k/ml-100k/u.data")
+    csv_source = Path("/Users/shaunakbasu/Documents/Datasets/ml-100k/ml-100k/u_data.csv")
+
+    if not csv_source.exists():
+        create_csv(data_source, csv_source)
     
 
+    dataset = RatingDataSetLoader(csv_source, NUM_FACTORS)
+    data_loader = DataLoader(dataset, shuffle=True, batch_size=5)
 
+    #Since we are stacking both the user embedding and the movie embedding, we multiply the num_factors by 2
+    m = Model(NUM_FACTORS*2).to(DEVICE)
+
+    #Set the criterion for measuring the loss function
+    #criterion = nn.MSELoss()
+    criterion = nn.L1Loss()
+
+    #Choose Adam Optimizer, learning rate=lr; if the error doesn't decrease a number of epochs, lower the learning rate(Adam property?)
+    optimizer=torch.optim.Adam(m.parameters(),lr=0.01)
+
+    train_model(data_loader,m,criterion,optimizer,EPOCHS, DEVICE)
+    
+    
