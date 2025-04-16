@@ -1,0 +1,31 @@
+training:
+  batch_size: 126
+  nrof_epochs: 30
+  lr: 5e-4
+
+optimizer: ???
+
+server:
+  host: localhost
+  port: 80
+
+user:
+  name: ${oc.env:USER}
+  home: /home/${oc.env:USER}
+
+database:
+  password1: ${oc.env:PASSWORD1,my_password_1}
+  password2: ${oc.env:PASSWORD2,this_one_is_the_default_password}
+
+client:
+  url: http://${server.host}:${server.port}
+  server_port: ${server.port}
+  description: Client of ${.url}
+param_A: A
+param_B: B
+
+selected_plan: A
+plans:
+  A: plan A
+  B: plan B
+plan: ${plans[${selected_plan}]}
