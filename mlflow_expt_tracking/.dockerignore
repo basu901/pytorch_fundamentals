@@ -3,4 +3,5 @@
 !docker
 !pyproject.toml
 !poetry.lock
-!track_expt
+track_expt
+!src
