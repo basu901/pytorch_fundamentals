@@ -98,7 +98,7 @@ def main(args):
     test_size = 0.2
     train_df_x, test_df_x, train_df_y, test_df_y = prepare_data(params, labels, test_size=test_size)
 
-    #mlflow.set_tracking_uri("http://mlflow-tracking-server:5000")
+    mlflow.set_tracking_uri("http://mlflow-tracking-server:5000")
     mlflow.set_experiment("mlflow-models")
 
     with mlflow.start_run():

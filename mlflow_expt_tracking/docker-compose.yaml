@@ -1,0 +1,34 @@
+version: "3.8"
+
+volumes:
+  postgresql-data:
+  artifact-store:
+
+services:
+  mlflow-db:
+    container_name: mlflow-backend-store #This container name is being used to connect to POSTGRES in the .mlflow-dev file in .envs
+    image: postgres:13.3
+    env_file:
+      - .envs/.postgres
+
+  mlflow-server:
+    image: local-mlflow-tracking-server #We will build this image
+    container_name: local-mlflow-tracking-server
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile
+      args:
+        MLFLOW_ARTIFACT_STORE: ${MLFLOW_ARTIFACT_STORE}
+    ports:
+      - ${LOCAL_DEV_MLFLOW_SERVER_PORT}:${LOCAL_DEV_MLFLOW_SERVER_PORT}
+    depends_on:
+      - mlflow-db
+    env_file:
+      - .envs/.postgres
+      - .envs/.mlflow-common #Will keep configs for both remote and local
+      - .envs/.mlflow-dev #Will keep config only for local
+    volumes:
+      - ./:/app
+      - artifact-store:${MLFLOW_ARTIFACT_STORE}
+    ipc: host
+    init: true
