@@ -209,6 +209,18 @@ def predict_rating(user_id, movie_id, connection_params):
             insert_weights(user_id, user, weight, connection_params)
             user_j_info.append((user, rating_j, avg_j, weight))
 
+    #Iterate through user_j_info to predict the final rating
+    weighted_rating = 0
+    total_weights = 0
+    for item in user_j_info:
+        rating_given = item[1]
+        bias = item[2]
+        user_weight = item[3]
+        weighted_rating += user_weight*(rating_given-bias)
+        total_weights += abs(user_weight)
+
+    return avg_user_id + (weighted_rating/total_weights)
+
     
 
 if __name__=="__main__":
@@ -222,4 +234,4 @@ if __name__=="__main__":
 
     #populate_tables()
     #populate_avg_rating_table(connection_params)
-    predict_rating(849,652, connection_params)
+    print(predict_rating(849,652, connection_params))
