@@ -1,4 +1,5 @@
 import os
+import argparse
 from typing import Dict
 import pandas as pd
 from pathlib import Path
@@ -25,7 +26,7 @@ def create_tables():
     with connect(f"dbname={db} user={pg_user} password={pg_passwd} host={pg_host} port={pg_port}") as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                CREATE TABLE avg_rating(
+                CREATE TABLE IF NOT EXISTS avg_rating(
                         id serial PRIMARY KEY,
                         user_id int,
                         rating_avg real)
@@ -33,7 +34,7 @@ def create_tables():
 
             with conn.cursor() as cur:
                 cur.execute("""
-                    CREATE TABLE movie_details(
+                    CREATE TABLE IF NOT EXISTS movie_details(
                             id serial PRIMARY KEY,
                             movie_id int,
                             user_id int,
@@ -41,11 +42,27 @@ def create_tables():
                 """)
 
                 cur.execute("""
-                    CREATE TABLE user_weights(
+                    CREATE TABLE IF NOT EXISTS user_weights(
                             id serial PRIMARY KEY,
                             user_id_1 int,
                             user_id_2 int,
                             weight real)
+                """)
+
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS user_movie_predicted(
+                            id serial PRIMARY KEY,
+                            user_id int,
+                            movie_id int,
+                            predicted_rating real)
+                """)
+
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS movie_info(
+                            id serial PRIMARY KEY,
+                            user_id int,
+                            movie_id int,
+                            predicted_rating real)
                 """)
 
 
@@ -211,6 +228,11 @@ def predict_rating(user_id:int, movie_id:int, connection_params:Dict):
             row = cur.fetchone()
             if row:
                 return f"Prediction Not Required. Rating is {row[0]}"
+            
+            cur.execute("SELECT predicted_rating FROM user_movie_predicted WHERE user_id=%s AND movie_id=%s",(user_id,movie_id))
+            row = cur.fetchone()
+            if row:
+                return row[0]
 
     #user_j = has seen movie_id and has movies in common with user_id
     #Stores info for user_j.Stores the weight, rating given for movie_id, avg_rating
@@ -267,8 +289,15 @@ def predict_rating(user_id:int, movie_id:int, connection_params:Dict):
         weighted_rating += user_weight*(rating_given-bias)
         total_weights += abs(user_weight)
 
-    return avg_user_id + (weighted_rating/total_weights)
+    predicted_rating = round(avg_user_id + (weighted_rating/total_weights),2)
 
+    #Store predicted rating for subsequent calls
+    with connect(**connection_params) as conn:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO user_movie_predicted (user_id, movie_id, predicted_rating) VALUES(%s,%s,%s)", (user_id, movie_id, predicted_rating))
+    
+
+    return predicted_rating
     
 
 if __name__=="__main__":
@@ -284,4 +313,13 @@ if __name__=="__main__":
     #create_tables()
     #populate_tables()
     #populate_avg_rating_table(connection_params)
-    print(predict_rating(849,652, connection_params))
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-u",'--user', type=int,required=True)
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('-m', '--movie_id', type=int, help='Movie ID, should be int')
+    group.add_argument('-mn', '--movie_name',type=str, help='Movie Name')
+
+    args = parser.parse_args()
+
+    print(predict_rating(args.user, args.movie_id, connection_params))
